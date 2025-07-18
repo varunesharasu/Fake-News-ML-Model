@@ -90,12 +90,13 @@ def main():
     
     # Evaluate traditional models
     print("\n5. Evaluating traditional models...")
-    for name, model in trained_models.items():
+    predictions = traditional_ml.predict_individual_models(trained_models, X_test_combined)
+    
+    for name, pred_dict in predictions.items():
         try:
-            y_pred = model.predict(X_test_combined)
-            y_pred_proba = model.predict_proba(X_test_combined)[:, 1]
-            
-            results = evaluator.evaluate_model(y_test, y_pred, y_pred_proba, name)
+            results = evaluator.evaluate_model(
+                y_test, pred_dict['pred'], pred_dict['pred_proba'], name
+            )
             print(f"{name}: Accuracy = {results['Accuracy']:.4f}, F1-Score = {results['F1-Score']:.4f}, AUC = {results['AUC']:.4f}")
         except Exception as e:
             print(f"Error evaluating {name}: {e}")
@@ -119,33 +120,38 @@ def main():
     try:
         dl_models = DeepLearningModels()
         
-        # Prepare sequences for deep learning (smaller vocab for speed)
-        all_texts = list(train_texts) + list(test_texts)
-        sequences = dl_models.prepare_sequences(all_texts, vocab_size=5000, max_length=100)
-        
-        train_sequences = sequences[:len(train_texts)]
-        test_sequences = sequences[len(train_texts):]
-        
-        # Train CNN model with fewer epochs
-        print("Training CNN model...")
-        cnn_model = dl_models.create_cnn_model(vocab_size=5000, max_length=100)
-        
-        history_cnn = cnn_model.fit(
-            train_sequences, y_train,
-            validation_data=(test_sequences, y_test),
-            epochs=3,  # Reduced epochs for speed
-            batch_size=64,  # Larger batch size for speed
-            verbose=1
-        )
-        
-        # Evaluate CNN
-        y_pred_cnn_proba = cnn_model.predict(test_sequences).flatten()
-        y_pred_cnn = (y_pred_cnn_proba > 0.5).astype(int)
-        
-        cnn_results = evaluator.evaluate_model(
-            y_test, y_pred_cnn, y_pred_cnn_proba, "CNN"
-        )
-        print(f"CNN: Accuracy = {cnn_results['Accuracy']:.4f}, F1-Score = {cnn_results['F1-Score']:.4f}, AUC = {cnn_results['AUC']:.4f}")
+        if hasattr(dl_models, 'tokenizer'):  # Check if TensorFlow is available
+            # Prepare sequences for deep learning (smaller vocab for speed)
+            all_texts = list(train_texts) + list(test_texts)
+            sequences = dl_models.prepare_sequences(all_texts, vocab_size=5000, max_length=100)
+            
+            if sequences is not None:
+                train_sequences = sequences[:len(train_texts)]
+                test_sequences = sequences[len(train_texts):]
+                
+                # Train CNN model with fewer epochs
+                print("Training CNN model...")
+                cnn_model = dl_models.create_cnn_model(vocab_size=5000, max_length=100)
+                
+                if cnn_model is not None:
+                    history_cnn = cnn_model.fit(
+                        train_sequences, y_train,
+                        validation_data=(test_sequences, y_test),
+                        epochs=3,  # Reduced epochs for speed
+                        batch_size=64,  # Larger batch size for speed
+                        verbose=1
+                    )
+                    
+                    # Evaluate CNN
+                    y_pred_cnn_proba = cnn_model.predict(test_sequences).flatten()
+                    y_pred_cnn = (y_pred_cnn_proba > 0.5).astype(int)
+                    
+                    cnn_results = evaluator.evaluate_model(
+                        y_test, y_pred_cnn, y_pred_cnn_proba, "CNN"
+                    )
+                    print(f"CNN: Accuracy = {cnn_results['Accuracy']:.4f}, F1-Score = {cnn_results['F1-Score']:.4f}, AUC = {cnn_results['AUC']:.4f}")
+        else:
+            print("Skipping deep learning models - TensorFlow not available")
         
     except Exception as e:
         print(f"Error with deep learning model: {e}")
@@ -155,12 +161,15 @@ def main():
     
     # Display results table
     results_df = evaluator.compare_models()
-    if results_df is not None:
+    if results_df is not None and len(results_df) > 0:
         print("\nModel Comparison Results:")
         print(results_df.to_string(index=False))
         
         # Plot comparisons
-        evaluator.plot_model_comparison()
+        try:
+            evaluator.plot_model_comparison()
+        except Exception as e:
+            print(f"Error plotting comparison: {e}")
         
         # Plot confusion matrix for best model
         best_model_name = results_df.iloc[0]['Model']
@@ -176,6 +185,13 @@ def main():
             joblib.dump(scaler, 'models/saved_models/scaler.pkl')
             joblib.dump(feature_engineer, 'models/saved_models/feature_engineer.pkl')
             print(f"\nBest model ({best_model_name}) saved successfully!")
+        elif best_model_name == "Ensemble":
+            joblib.dump(ensemble_model, 'models/saved_models/ensemble_model.pkl')
+            joblib.dump(scaler, 'models/saved_models/scaler.pkl')
+            joblib.dump(feature_engineer, 'models/saved_models/feature_engineer.pkl')
+            print(f"\nEnsemble model saved successfully!")
+    else:
+        print("No models were successfully trained and evaluated.")
     
     print("\n=== Pipeline Complete ===")
 
