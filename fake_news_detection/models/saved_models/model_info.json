@@ -1,0 +1,26 @@
+{
+  "model_type": "LightGBM",
+  "accuracy": 0.9916666666666667,
+  "training_samples": 6000,
+  "features": [
+    "char_count",
+    "word_count",
+    "sentence_count",
+    "avg_word_length",
+    "uppercase_ratio",
+    "punctuation_count",
+    "exclamation_count",
+    "question_count",
+    "textblob_polarity",
+    "textblob_subjectivity",
+    "vader_compound",
+    "vader_positive",
+    "vader_negative",
+    "vader_neutral"
+  ],
+  "label_mapping": {
+    "0": "Real",
+    "1": "Fake"
+  },
+  "balanced_training": true
+}
