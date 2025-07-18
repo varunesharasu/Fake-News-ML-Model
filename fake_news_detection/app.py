@@ -10,25 +10,61 @@ warnings.filterwarnings('ignore')
 
 app = Flask(__name__)
 
-# Load the trained model and preprocessors
-try:
-    model = joblib.load('models/saved_models/lightgbm_model.pkl')
-    scaler = joblib.load('models/saved_models/scaler.pkl')
-    feature_engineer = joblib.load('models/saved_models/feature_engineer.pkl')
-    print("Models loaded successfully!")
-except Exception as e:
-    print(f"Error loading models: {e}")
-    model = None
-    scaler = None
-    feature_engineer = None
-
-# Initialize data processor
+# Global variables for models
+model = None
+scaler = None
+feature_engineer = None
 data_processor = DataProcessor()
+
+def load_models():
+    """Load the trained models"""
+    global model, scaler, feature_engineer
+    
+    try:
+        # Try different model names
+        model_files = [
+            'models/saved_models/lightgbm_model.pkl',
+            'models/saved_models/best_model.pkl',
+            'models/saved_models/ensemble_model.pkl'
+        ]
+        
+        model_loaded = False
+        for model_file in model_files:
+            if os.path.exists(model_file):
+                model = joblib.load(model_file)
+                print(f"✅ Model loaded from: {model_file}")
+                model_loaded = True
+                break
+        
+        if not model_loaded:
+            print("❌ No model file found!")
+            return False
+        
+        # Load preprocessors
+        if os.path.exists('models/saved_models/scaler.pkl'):
+            scaler = joblib.load('models/saved_models/scaler.pkl')
+            print("✅ Scaler loaded!")
+        else:
+            print("❌ Scaler not found!")
+            return False
+            
+        if os.path.exists('models/saved_models/feature_engineer.pkl'):
+            feature_engineer = joblib.load('models/saved_models/feature_engineer.pkl')
+            print("✅ Feature engineer loaded!")
+        else:
+            print("❌ Feature engineer not found!")
+            return False
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error loading models: {e}")
+        return False
 
 def predict_news(news_text):
     """Predict if news is fake or real"""
-    if model is None:
-        return {"error": "Model not loaded"}
+    if model is None or scaler is None or feature_engineer is None:
+        return {"error": "Models not loaded. Please train the models first."}
     
     try:
         # Create a temporary dataframe
@@ -59,7 +95,10 @@ def predict_news(news_text):
         X_features = features_df[feature_columns].fillna(0)
         
         # Create TF-IDF features
-        tfidf_features = feature_engineer.tfidf_vectorizer.transform([temp_df['content_no_stopwords'].iloc[0]])
+        if hasattr(feature_engineer, 'tfidf_vectorizer') and feature_engineer.tfidf_vectorizer is not None:
+            tfidf_features = feature_engineer.tfidf_vectorizer.transform([temp_df['content_no_stopwords'].iloc[0]])
+        else:
+            return {"error": "TF-IDF vectorizer not available"}
         
         # Scale the basic features
         X_features_scaled = scaler.transform(X_features)
@@ -118,5 +157,16 @@ def predict():
 def about():
     return render_template('about.html')
 
+# Load models when the app starts
+models_loaded = load_models()
+
 if __name__ == '__main__':
+    if not models_loaded:
+        print("\n" + "="*50)
+        print("⚠️  MODELS NOT LOADED!")
+        print("Please run one of these commands first:")
+        print("1. python save_models.py  (quick training)")
+        print("2. python main_optimized.py  (full training)")
+        print("="*50 + "\n")
+    
     app.run(debug=True, host='0.0.0.0', port=5000)
